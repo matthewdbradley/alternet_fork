@@ -1,6 +1,6 @@
 import pandas as pd
 from inference import *
-from load_data import *
+from alternet.src.alternet.data_preprocessing import *
 import os
 import gseapy as gp
 import alternet.src.alternet.runners.magnet as magnet 

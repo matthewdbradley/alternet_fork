@@ -6,10 +6,10 @@ build-backend = "hatchling.build"
 name = "alternet"
 version = "0.1.0"
 authors = [
-  { name="Author Name", email="author@example.com" },
-]
-description = "A short description of my project."
-requires-python = ">=3.11"
+  { name="Anne Hartebrodt", email="anne.hartebrodt@fau.de" },
+  {name="Juliane Hoffmann", email = "juliane.hoffmann@fau.de"}]
+description = "Alternative splicing aware GRNS"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

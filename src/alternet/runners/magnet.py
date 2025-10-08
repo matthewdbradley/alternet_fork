@@ -1,6 +1,6 @@
 import pandas as pd
 from inference import *
-from load_data import *
+from alternet.src.alternet.data_preprocessing import *
 from total_pipeline import *
 
 def load_magnet_data(config, tf_list):
