@@ -3,13 +3,13 @@ import pandas as pd
 import os.path as op
 import os
 from distributed import Client, LocalCluster
-from arboreto_added.algo import grnboost2
-from data_preprocessing import *
+from signifikante.algo import grnboost2
+from alternet.data_preprocessing import *
 from collections import defaultdict
 from tqdm import tqdm 
 
 
-def compute_grn(gene_data, target_names, tf_list, client, use_tf=True):
+def compute_grn(gene_data, target_names, tf_list, client=None, use_tf=True):
     
     ''' 
     Computes a gene regulatory network (GRN) using GRNBoost2.
@@ -24,8 +24,6 @@ def compute_grn(gene_data, target_names, tf_list, client, use_tf=True):
     Returns:
         pd.DataFrame: Computed network containing regulatory interactions between genes and/or transcription factors.
     '''   
-    
-    print('Computing network')
 
     # compute the GRN
     if not use_tf:
@@ -33,7 +31,7 @@ def compute_grn(gene_data, target_names, tf_list, client, use_tf=True):
                             client_or_address=client)
     else:
         network = grnboost2(expression_data=gene_data,
-                            target_genes=target_names,
+                            target_names=target_names,
                             tf_names=tf_list,
                             client_or_address=client)
 
@@ -43,7 +41,8 @@ def compute_grn(gene_data, target_names, tf_list, client, use_tf=True):
 
 
 
-def inference(config, nruns, data_canonical, data_asware, target_gene_list, tf_list, aggregate=True):
+
+def inference(gene_data,  tf_list, target_names='all', n_runs = 10):
     '''
     Performs inference to create gene regulatory networks (GRNs) for transcript-level and gene-level data.
     Optionally aggregates the results from multiple runs.
@@ -60,90 +59,47 @@ def inference(config, nruns, data_canonical, data_asware, target_gene_list, tf_l
     
     '''
 
-    print('Starting inference ...')
 
     client = Client(LocalCluster())
 
-
     
-    ## RUN INFERENCE for AS-Aware network
-    results_dir = op.join(config['results_dir'], config['tissue'])
-    results_dir_grn = op.join(results_dir, 'grn')
-    os.makedirs(results_dir_grn, exist_ok=True)
-
-    data_asaware_t = data_asware.T
-    data_canonical_t = data_canonical.T
-
-    tfs_transcripts = tf_list['Transcript stable ID'].unique().tolist()
-    tfs_genes = tf_list['Gene stable ID'].unique().tolist()
-    
-    as_aware_grns = []
-    for i in range(1, nruns+1):
-        grn1 = compute_grn(data_asaware_t,
-                                    target_gene_list,
-                                    tfs_transcripts,
-                                    client,
-                                    use_tf=True)
-        as_aware_grns.append(grn1)
-
-    canoncial_grns = []
-    for i in range(1, nruns+1):
-        grn2 = compute_grn(data_canonical_t,
-                                    target_gene_list,
-                                    tfs_genes,
-                                    client,
-                                    use_tf=True)
-        canoncial_grns.append(grn2)
-        
+    grns = []
+    for i in tqdm(range(n_runs)):
+        grn = compute_grn(gene_data=gene_data,
+                            target_names = target_names,
+                            tf_list = tf_list,
+                            client=client,
+                            use_tf=True)
+        grns.append(grn)
     
     client.close()
-    print('Inference complete')
 
+    grn = aggregate_results(grns)
 
-    if aggregate:
-        print('Aggregate results')
-
-        as_aware = aggregate_results(as_aware_grns)
-        canoncial = aggregate_results(canoncial_grns)
-        return as_aware, canoncial
-    
-    return as_aware_grns, canoncial_grns
-
+    return grn
 
 
 
 def aggregate_results(grn_results):
     '''
-    Aggregates results from multiple GRN inference runs.
-
+    Aggregates results from multiple GRN inference
     Parameters:
         grn_results (list of pd.DataFrame): Results from multiple GRNBoost runs.
 
     Returns:
         pd.DataFrame: Aggregated consensus network.
     '''
-    # Create a dictionary to store the aggregated results
-    edge_data = defaultdict(list)
+    
+    combined_df = pd.concat(grn_results, ignore_index=True)
 
-    print("Going through edges of each df ...")
-    for df in grn_results:
-        for _, row in tqdm(df.iterrows(), total=df.shape[0]):
-            edge = (row['source'], row['target'])
-            edge_data[edge].append(row['importance'])
-
-    aggregated_edges = []
-    for (source, target), weights in tqdm(edge_data.items(), total=len(edge_data)):
-        aggregated_edges.append(
-            {
-                'source': source,
-                'target': target,
-                'frequency': len(weights),
-                'mean_importance' : sum(weights) / len(weights),
-                "median_importance": sorted(weights)[len(weights) // 2]
-            }
-        )
-    aggregated_df = pd.DataFrame(aggregated_edges)
-
+    aggregated_df = combined_df.groupby(['source', 'target'])['importance'].agg(
+        frequency='count',
+        mean_importance='mean',
+        median_importance='median'
+    ).reset_index() 
+    
     return aggregated_df
+
+
 
     

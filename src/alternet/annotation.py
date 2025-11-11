@@ -4,6 +4,61 @@ import numpy as np
 
 
 
+
+def map_tf_ids(tf_list, biomart):
+    ''' 
+    Reads a transcription factor list from file and merges it with gene information from a BioMart DataFrame.
+
+    Parameters:
+        tf_list: (pd.DataFrame): dataFrame with a single column containing the gene name
+        biomart (pd.DataFrame): DataFrame with gene and transcript information from BioMart.
+
+    Returns:
+        pd.DataFrame: Transcription factors with corresponding gene and transcript information from BioMart.
+   '''
+    tf_list.columns  = ['TF'] # rename column to TF 
+    tf_list = tf_list.merge(biomart, left_on = 'TF', right_on = 'Gene name') # merge tf list with biomart: join 'TF' with 'Gene name'
+    tf_list = tf_list.loc[:, ['TF', 'Gene stable ID', 'Transcript stable ID']].drop_duplicates() #remove individual versions
+    return tf_list
+
+
+def create_transcript_mapping(biomart):
+    transcript_mapper = dict(zip(biomart['Transcript stable ID'], biomart['Gene stable ID']))
+    return transcript_mapper
+    
+
+def create_filtered_gene_to_transcripts_mapping(biomart, gene_list, transcript_list):
+    """
+    Creates a dictionary mapping 'Gene stable ID' to a list of associated 
+    'Transcript stable ID's, filtering the pairs against a provided 
+    list of valid genes and a list of valid transcripts.
+
+    Args:
+        biomart (pd.DataFrame): A pandas DataFrame with 'Gene stable ID' 
+                                and 'Transcript stable ID' columns.
+        gene_list (list or set): A collection of gene IDs to include.
+        transcript_list (list or set): A collection of transcript IDs to include.
+
+    Returns:
+        dict: A dictionary where keys are filtered gene IDs (str) and values are 
+              lists of filtered transcript IDs (list of str).
+    """
+    # Convert lists to sets for O(1) average time complexity lookups
+    valid_genes = set(gene_list)
+    valid_transcripts = set(transcript_list)
+    
+    gene_to_transcripts = {}
+    
+    for gene_id, transcript_id in zip(biomart['Gene stable ID'], biomart['Transcript stable ID']):
+        # Apply the exclusion criteria: Both gene and transcript must be in their respective lists
+        if gene_id in valid_genes and transcript_id in valid_transcripts:
+            if gene_id not in gene_to_transcripts:
+                gene_to_transcripts[gene_id] = []
+            gene_to_transcripts[gene_id].append(transcript_id)
+            
+    return gene_to_transcripts
+    
+
 def create_transcipt_annotation_database(tf_list, appris_path, digger_path):
     '''
     Creates an annotation database for transcription factor (TF) isoforms by integrating data from 
@@ -33,10 +88,9 @@ def create_transcipt_annotation_database(tf_list, appris_path, digger_path):
 
 
     # preprocessing
-    tf_database_og = tf_list.drop(columns=['index'])
 
     # merge appris
-    tf_database = tf_database_og.merge(appris_df, left_on='Transcript stable ID', right_on='Transcript ID', how='left')
+    tf_database = tf_list.merge(appris_df, left_on='Transcript stable ID', right_on='Transcript ID', how='left')
     # drop unrelevant columns
     tf_database = tf_database.drop(columns=['Ensembl Gene ID', 'Transcript ID'])
 
@@ -165,18 +219,17 @@ def check_annotations(transcript_id, annotation_database):
         })
     
     gene_id = t_row['Gene stable ID']
-    related_transcripts = annotation_database[
-        (annotation_database['Gene stable ID'] == gene_id) &
-        (annotation_database['Transcript stable ID'] != transcript_id)
-    ]
+    # get other transcripts from the same gene
+    related_transcripts = annotation_database[(annotation_database['Gene stable ID'] == gene_id) & (annotation_database['Transcript stable ID'] != transcript_id)]
 
     #Check Appris Annotation
-    if pd.notna(t_row['APPRIS Annotation']) and 'PRINCIPAL' not in t_row['APPRIS Annotation']:
-        principal_isos = related_transcripts[
-            related_transcripts['APPRIS Annotation'].str.contains('PRINCIPAL', na=False)
-        ]
+    if pd.notna(t_row['APPRIS Annotation']) and ('PRINCIPAL' not in t_row['APPRIS Annotation']):
+        # if the current transcript is not the principal isoform, get the annotaiton for the principal isoform to compare
+        # against, but if it does not exist, use all related transcripts.
+        principal_isos = related_transcripts[related_transcripts['APPRIS Annotation'].str.contains('PRINCIPAL', na=False)]
         comparison_df = principal_isos if not principal_isos.empty else related_transcripts
     else:
+        # if the current transcript is annotated as the principal isoform, compare against all other transcripts
         comparison_df = related_transcripts
 
     transcript_data = {
@@ -188,7 +241,9 @@ def check_annotations(transcript_id, annotation_database):
         'Pfam ID': t_row.get('Pfam ID'),
     }
 
-    return pd.Series(compare_values(transcript_data, comparison_df))
+    # for compare the transcript data against the chosen set to find out what makes the transcript unique.
+    unique_items = compare_values(transcript_data, comparison_df)
+    return pd.Series(unique_items)
 
 
 
@@ -222,7 +277,7 @@ def build_transcript_annotation_table_for_unique_tfs(unique_tfs, annotation_data
     return annotation_df
 
 
-def merge_annotations_to_grn(grn, annotation_database):
+def merge_annotations_to_grn(grn, annotation_database, transcript_column = 'source_transcript'):
     '''
     Merge transcript-level annotations into a gene regulatory network (GRN) based on source transcript IDs.
 
@@ -241,8 +296,26 @@ def merge_annotations_to_grn(grn, annotation_database):
 
     '''
 
-    unique_transcripts = grn['source'].unique()
+    unique_transcripts = grn[transcript_column].unique()
     annot_df = build_transcript_annotation_table_for_unique_tfs(unique_transcripts, annotation_database)
-    grn_annot = grn.merge(annot_df, how='left', left_on='source', right_index=True)
+    grn_annot = grn.merge(annot_df, how='left', left_on=transcript_column, right_index=True)
 
     return grn_annot
+
+
+
+def compute_isoform_gene_correlations(transcript_data_cp_scaled, gene_data_cp_scaled, gene_to_transcript_mapping):
+
+    correlation_collector = []
+
+    for g in gene_to_transcript_mapping:
+        if len(gene_to_transcript_mapping[g]) == 1:
+            continue
+        subi = pd.concat([transcript_data_cp_scaled.loc[:, gene_to_transcript_mapping[g]].T, gene_data_cp_scaled.loc[:, [g]].T], ignore_index=True)
+        corre = np.corrcoef(subi)[0][1:]
+        for c in range(len(corre)):
+            correlation_collector.append([g, gene_to_transcript_mapping[g][c], corre[c]])
+    correlation_collector = pd.DataFrame(correlation_collector)
+    correlation_collector.columns = ['gene','transcript', 'correlation']
+
+    return correlation_collector

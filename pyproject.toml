@@ -5,17 +5,98 @@ build-backend = "hatchling.build"
 [project]
 name = "alternet"
 version = "0.1.0"
+
 authors = [
   { name="Anne Hartebrodt", email="anne.hartebrodt@fau.de" },
   {name="Juliane Hoffmann", email = "juliane.hoffmann@fau.de"}]
+
 description = "Alternative splicing aware GRNS"
 requires-python = ">=3.10"
+
+license = { text = "GNU General Public License v3 (GPLv3)" }
+
+urls = {Homepage = "https://github.com/bionetslab/alternet"}
+
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
 ]
-dynamic = ["dependencies"]
 
-[tool.setuptools.dynamic]
-dependencies = {file = "requirements.txt"}
+dependencies = [
+    "pip",
+    "ipykernel",
+    "plotly",
+    "requests",
+    "lda",
+    "numpy",
+    "scipy",
+    "pandas",
+    "scanpy",
+    "matplotlib",
+    "arboreto",
+    "networkx",
+    "igraph",
+    "gseapy",
+    "signifikante @ git+ssh://git@github.com/bionetslab/SignifiKANTE.git@main",
+    "graphviz",
+    ]
+
+[tool.hatch.metadata]
+# This flag is required to allow direct references (like file: or git+https) 
+# in the core 'project.dependencies' list.
+allow-direct-references = true
+
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+python = "*" 
+dask = "*"
+distributed = "*"
+numpy = "*" 
+pandas = "*"
+scikit-learn = "*"
+scipy = "*"
+scikit-learn-extra = "*"
+pyarrow = "*" 
+numba = "*"
+pytest = "*"
+xgboost = "*"
+graphviz = "*"
+
+
+[tool.pixi.pypi-dependencies]
+# This section remains for pure-Python packages not available or preferred from Conda,
+# but it currently only contains the local editable install.
+alternet = { path = ".", editable = true }
+
+[tool.pixi.environments]
+kernel = ["kernel"]
+
+
+# --- KERNEL ENVIRONMENT  ---
+[tool.pixi.feature.kernel.dependencies]
+python = "*"
+dask = "*"
+distributed = "*"
+numpy = "*" # Retaining your version constraint
+pandas = "*"
+scikit-learn = "*"
+scipy = "*"
+scikit-learn-extra = "*"
+pyarrow = "*" 
+ipykernel = "*"
+numba = "*"
+xgboost="*"
+graphviz = "*"
+
+
+[tool.pixi.feature.kernel.pypi-dependencies]
+alternet = { path = ".", editable = true }
+
+[tool.pixi.feature.kernel.tasks]
+install-kernel = "python -m ipykernel install --user --name pixi_alternet --display-name pixi_alternet"
+uninstall-kernel = "jupyter kernelspec uninstall pixi_alternet"
