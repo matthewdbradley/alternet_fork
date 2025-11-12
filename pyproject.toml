@@ -39,7 +39,7 @@ dependencies = [
     "igraph",
     "gseapy",
     "signifikante @ git+ssh://git@github.com/bionetslab/SignifiKANTE.git@main",
-    "graphviz",
+    "graphviz", "gprofiler-official>=1.0.0,<2",
     ]
 
 [tool.hatch.metadata]

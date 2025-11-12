@@ -1,6 +1,7 @@
 import pandas as pd 
 import os.path as op
 import copy
+import numpy as np
 
 
 def filter_aggregated(data, threshold_importance=0.3, threshold_frequency=5, importance_column='median_importance', frequency_column = 'frequency'):
@@ -49,6 +50,28 @@ def map_transcript_to_gene(net, transcript_mapper, column = 'source', rename_col
     net[output_column] = net[column].apply(lambda x: transcript_mapper[x])
     net = net.rename(columns={column:rename_column})
     return net
+
+
+def create_ensg_to_geneid_mapping(biomart):
+    transcript_mapper = dict(zip(biomart['Gene stable ID'], biomart['Gene name']))
+    return transcript_mapper
+    
+def create_enst_to_tid_mapping(biomart):
+    transcript_mapper = dict(zip(biomart['Transcript stable ID'], biomart['Transcript name']))
+    return transcript_mapper
+
+
+def add_transcript_names(edgelist, biomart, transcript_column = 'source_transcript'):
+    transcript_name_mapper = create_enst_to_tid_mapping(biomart)
+    edgelist[f'{transcript_column}_name'] = edgelist[transcript_column].apply(lambda x: transcript_name_mapper[x])
+    return edgelist
+
+def add_gene_names(edgelist, biomart, gene_column = 'target_gene'):
+    gene_name_mapper = create_ensg_to_geneid_mapping(biomart)
+    edgelist[f'{gene_column}_name'] = edgelist[gene_column].apply(lambda x: gene_name_mapper[x])
+    return edgelist
+
+
 
 def create_edge_key(net, source_column = 'source_gene', target_column = 'target'):
     net['edge_key'] = net[source_column]+'_' + net[target_column]
@@ -197,6 +220,9 @@ def isoform_categorization(transcript_data, gene_data, tf_list, threshold_domina
 
     transcript_sums['isoform_category'] = transcript_sums.apply(classify_isoform, axis=1)
 
+    transcript_sums = transcript_sums.loc[:, ['Gene stable ID', 'Transcript stable ID', 'percentage', 'isoform_category']]
+
+
     return transcript_sums
 
 
@@ -319,3 +345,91 @@ def plausibility_filtering_gene_unique(gene_unique, gene_categories):
     filter_info = {'plausibility_gene': {'before': n_before, 'n_after_single': n_after_single,  'n_after_dominant': n_after_dominant}}
     gene_unique = gene_unique.sort_values('median_importance', ascending=False)
     return gene_unique, filter_info
+
+
+
+def create_common_edge_dataframe(common_edges):
+    common_edges_ge = common_edges[pd.isna(common_edges.source_transcript)].copy()
+    common_edges_t = common_edges[~pd.isna(common_edges.source_transcript)].copy()
+    merged_edges = common_edges_t.merge(common_edges_ge, on='edge_key', suffixes=['_te', '_ge'])
+    merged_edges = merged_edges.rename(columns={'source_transcript_te': 'source_transcript', 'source_gene_te': 'source_gene', 'target_te': 'target_gene'})
+    merged_edges = merged_edges.loc[:, ['source_transcript', 'source_gene', 'target_gene', 'edge_key', 'frequency_te', 'mean_importance_te', 'median_importance_te',  'frequency_ge', 'mean_importance_ge', 'median_importance_ge']]
+    return merged_edges
+
+
+def plausibility_filtering_common_edges_dominant(consistent, threshold_upper=1.5, threshold_lower=0.5, threshold_frequency = 10):
+    """
+    Plausbility filtering for edges which are found in both networks
+    As the isoforms are either dominant or there is a single isoform it is required
+        - the are at the same high frequency in both networks
+        - fold change of importances is about 1.0
+
+    """
+    n_before = consistent.shape[0]
+    consistent['fc'] = consistent['mean_importance_te']/consistent['mean_importance_ge']
+    consistent['mean_importance_te_ge'] = consistent[['median_importance_te', 'median_importance_ge']].mean(axis=1)
+    consistent = consistent[(consistent['frequency_te']>=threshold_frequency )& (consistent['frequency_ge']>=threshold_frequency)]
+    n_after_frequency = consistent.shape[0]
+
+    consistent = consistent[(consistent['fc']<threshold_upper) & (consistent['fc']>threshold_lower)].sort_values('mean_importance_te', ascending=False)
+    n_after_threshold = consistent.shape[0]
+
+    consistent = consistent.reset_index()
+    consistent = consistent.drop(columns = ['index'])
+    consistent = consistent.sort_values('mean_importance_te_ge',ascending=False)
+    filter_info = {'plausibility_common_dominant': {'before': n_before, 'n_after_frequency': n_after_frequency, 'n_after_threshold': n_after_threshold}}
+
+    return consistent.copy(), filter_info
+
+
+def split_by_isoform_category(merged_edges, gene_categories):
+    merged_edges = merged_edges.merge(gene_categories, left_on='source_gene', right_on='Gene stable ID')
+    merged_edges = merged_edges.loc[:, ['source_transcript', 'source_gene', 'target_gene', 'edge_key', 'frequency_te', 'mean_importance_te', 'median_importance_te',  'frequency_ge', 'mean_importance_ge', 'median_importance_ge', 'gene_category']]
+
+    consistent = merged_edges[merged_edges.gene_category.isin(['single', 'dominant'])].copy()
+    ambigous = merged_edges[merged_edges.gene_category.isin(['balanced', 'non-dominant'])].copy()
+    return consistent, ambigous
+
+
+def find_likely_isoform_specific(ambigous, lf_threshold = 2, frequency_threshold = 10):
+    ambigous['fc']  = ambigous['mean_importance_te']/ambigous['mean_importance_ge']
+    ambigous['absolute_difference'] = np.abs(ambigous['mean_importance_te']- ambigous['mean_importance_ge'])
+    
+    n_before = ambigous.shape[0]
+    likely_isoform_specific = ambigous[(ambigous['fc']>lf_threshold)  & (ambigous['frequency_ge']>=frequency_threshold)].copy()
+
+    n_isoform_likely = likely_isoform_specific.shape[0]
+    remove_keys = likely_isoform_specific.edge_key
+    likely_isoform_specific = likely_isoform_specific.sort_values('median_importance_te', ascending=False)
+    likely_isoform_specific = likely_isoform_specific.reset_index()
+    likely_isoform_specific = likely_isoform_specific.drop(columns = ['index'])
+    ambigous = ambigous[~ambigous.edge_key.isin(remove_keys)].copy()
+
+    filter_info = {'plausibility_common_likely_isoform': {'ambigous_before': n_before,  'n_isoform_likely': n_isoform_likely, 'ambigous_after': ambigous.shape[0]}}
+
+    return likely_isoform_specific, ambigous, filter_info
+
+
+def find_likely_gene_specific(ambigous, frequency_threshold = 10, lf_threshold = 0.5):
+    ambigous['fc']  = ambigous['mean_importance_te']/ambigous['mean_importance_ge']
+
+    n_before = ambigous.shape[0]
+
+    ambigous['gene_specific'] = ambigous.groupby('edge_key')['fc'].transform('max') < lf_threshold
+    likely_gene_specific = ambigous[ambigous.gene_specific]
+    remove_keys_edge  = likely_gene_specific.edge_key
+
+    likely_gene_specific = likely_gene_specific[(likely_gene_specific['frequency_ge']>=frequency_threshold)].copy()
+    likely_gene_specific.sort_values('median_importance_ge')
+    likely_gene_specific = likely_gene_specific.reset_index()
+    likely_gene_specific = likely_gene_specific.drop(columns = ['index'])
+
+    n_gene_likely = likely_gene_specific.shape[0]
+
+    ambigous = ambigous[~ambigous.edge_key.isin(remove_keys_edge)].copy()
+    
+    filter_info = {'plausibility_common_likely_isoform': {'ambigous_before': n_before,  'n_gene_likely': n_gene_likely, 'ambigous_after': ambigous.shape[0]}}
+
+
+    return likely_gene_specific, ambigous, filter_info
+    
