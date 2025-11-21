@@ -63,7 +63,7 @@ def create_filtered_gene_to_transcripts_mapping(biomart, gene_list, transcript_l
     return gene_to_transcripts
     
 
-def create_transcipt_annotation_database(tf_list, appris_path, digger_path):
+def create_transcipt_annotation_database(tf_list, appris_df, digger):
     '''
     Creates an annotation database for transcription factor (TF) isoforms by integrating data from 
     APPRIS and DIGGER sources.
@@ -86,9 +86,7 @@ def create_transcipt_annotation_database(tf_list, appris_path, digger_path):
             A merged DataFrame that includes original TF transcript information along with additional 
             functional annotations from APPRIS and DIGGER, aggregated at the transcript level.
     '''
-    
-    appris_df = pd.read_csv(appris_path, sep='\t')
-    digger = pd.read_csv(digger_path)
+
 
 
     # preprocessing
