@@ -3,6 +3,7 @@
 AlterNet infers alternative-splicing aware gene-regulatory networks by implementing a pipeline based on GRNboost2 with plausibility filtering and annotation steps.
 The project can be installed via pip or using pixi. For more information please refer to our preprint:
 
+<img width="1732" height="703" alt="image" src="https://github.com/user-attachments/assets/88bd869b-a7e0-44d9-92a4-53cd917fe419" />
 
 
 ## Installation with conda
