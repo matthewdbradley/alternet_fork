@@ -5,7 +5,25 @@ The project can be installed via pip or using pixi. For more information please 
 
 
 
-## Installation
+## Installation with conda
+```
+git clone git@github.com:bionetslab/alternet.git
+cd alternet
+conda create -n alternet
+conda activate alternet
+pip install . -e
+
+```
+
+## installation with pixi
+A) Install pixi from pixi.sh
+B) Install alternet interactive kernel and run notebook in tutorials folder
+
+```
+pixi run install-kernel
+pixi run jupyter-notebook
+pixi run jupyter-notebook src/alternet/tutorials/alternet_minimal.ipynb
+```
 
 
 ## Minimal working example
