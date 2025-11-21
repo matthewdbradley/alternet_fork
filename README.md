@@ -6,17 +6,8 @@ The project can be installed via pip or using pixi. For more information please 
 <img width="1732" height="703" alt="image" src="https://github.com/user-attachments/assets/88bd869b-a7e0-44d9-92a4-53cd917fe419" />
 
 
-## Installation with conda
-```
-git clone git@github.com:bionetslab/alternet.git
-cd alternet
-conda create -n alternet
-conda activate alternet
-pip install . -e
 
-```
-
-## installation with pixi
+## Installation with pixi + minimal working example (tutorial)
 A) Install pixi from pixi.sh
 B) Install alternet interactive kernel and run notebook in tutorials folder
 
@@ -26,6 +17,14 @@ pixi run jupyter-notebook
 pixi run jupyter-notebook src/alternet/tutorials/alternet_minimal.ipynb
 ```
 
+## Installation with conda/pip
+```
+git clone git@github.com:bionetslab/alternet.git
+cd alternet
+conda create -n alternet
+conda activate alternet
+pip install . -e
+```
 
 ## Minimal working example
 GRN inference is a computationally heavy step. The minimal example can be run on a small subset of the data with a couple of target genes. (NOTE: it is possible that
