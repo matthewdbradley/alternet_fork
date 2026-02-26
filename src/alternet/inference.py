@@ -8,6 +8,17 @@ from alternet.data_preprocessing import *
 from collections import defaultdict
 from tqdm import tqdm 
 
+    '''
+    Finds number of threads based on SLURM job parameters
+    '''
+
+def get_client():
+    n_cpus = os.environ.get("SLURM_CPUS_PER_TASK", 1)
+    if n_cpus:
+        return Client(processes=True, n_workers=int(n_cpus), threads_per_worker=1)
+    else:
+        return Client(LocalCluster())
+
 
 def compute_grn(gene_data, target_names, tf_list, client=None, use_tf=True):
     
@@ -60,7 +71,7 @@ def inference(gene_data,  tf_list, target_names='all', n_runs = 10):
     '''
 
 
-    client = Client(LocalCluster())
+    client = get_client()
 
     
     grns = []
