@@ -1,0 +1,37 @@
+/home/mxb1123/alternet_fork/src/minimal-working-ex.py:27: DtypeWarning: Columns (0) have mixed types. Specify dtype option on import or set low_memory=False.
+  digger_df = pd.read_csv(digger_path, sep=",")
+alternet.annotation - INFO - map_tf_ids: 1797 input TFs, 1779 matched to biomart, 16298 transcript IDs
+alternet.runners.run_alternet - INFO - TF list after biomart merge: 16298 TFs, 1948 unique genes, 16298 unique transcripts
+alternet.runners.run_alternet - INFO - TF annotation database: 16298 rows
+Successfully retrieved n_cpus and started cluster
+Using fork method for cluster config
+  0%|          | 0/10 [00:00<?, ?it/s] 10%|█         | 1/10 [00:05<00:51,  5.69s/it] 30%|███       | 3/10 [00:05<00:10,  1.55s/it] 40%|████      | 4/10 [00:06<00:06,  1.05s/it] 50%|█████     | 5/10 [00:06<00:04,  1.16it/s] 60%|██████    | 6/10 [00:06<00:02,  1.55it/s] 70%|███████   | 7/10 [00:06<00:01,  2.08it/s] 80%|████████  | 8/10 [00:06<00:00,  2.74it/s] 90%|█████████ | 9/10 [00:07<00:00,  3.51it/s]100%|██████████| 10/10 [00:07<00:00,  4.34it/s]100%|██████████| 10/10 [00:07<00:00,  1.41it/s]
+alternet.runners.run_alternet - INFO - Canonical GRN: 18 edges
+alternet.runners.run_alternet - INFO - Hybrid data: 16298 TF transcripts, 7 gene targets
+Successfully retrieved n_cpus and started cluster
+Using fork method for cluster config
+  0%|          | 0/10 [00:00<?, ?it/s] 10%|█         | 1/10 [00:01<00:16,  1.78s/it] 20%|██        | 2/10 [00:01<00:06,  1.24it/s] 30%|███       | 3/10 [00:02<00:03,  1.92it/s] 40%|████      | 4/10 [00:02<00:02,  2.73it/s] 50%|█████     | 5/10 [00:02<00:01,  3.68it/s] 60%|██████    | 6/10 [00:02<00:00,  4.65it/s] 70%|███████   | 7/10 [00:02<00:00,  5.62it/s] 80%|████████  | 8/10 [00:02<00:00,  6.44it/s]100%|██████████| 10/10 [00:02<00:00,  7.53it/s]100%|██████████| 10/10 [00:02<00:00,  3.51it/s]
+alternet.runners.run_alternet - INFO - AS-aware GRN: 70 edges
+alternet.postprocessing - INFO - get_diff: 0 gene-only edges, 10 transcript-only edges (from 18 gene / 21 transcript total)
+alternet.runners.run_alternet - INFO - Edge diff: 78 common, 0 gene-unique, 10 isoform-unique
+alternet.postprocessing - INFO - frequency_filter (threshold=10): 0 -> 0 edges
+alternet.postprocessing - INFO - frequency_filter (threshold=10): 10 -> 10 edges
+alternet.runners.run_alternet - INFO - After frequency filter (threshold=10): 0 gene-unique, 10 isoform-unique
+alternet.postprocessing - INFO - plausibility_filtering: 10 -> 9 after removing 'single', -> 9 after removing 'dominant'
+alternet.runners.run_alternet - INFO - After plausibility filter: 9 isoform-unique edges remain
+alternet.annotation - INFO - annotate_isoform_exclusive_edges: 9 GRN rows, 9 unique transcripts
+alternet.annotation - INFO - build_transcript_annotation_table_for_unique_tfs: annotating 9 transcripts
+alternet.postprocessing - INFO - plausibility_filtering_gene_unique: 0 -> 0 after removing 'single', -> 0 after removing 'dominant'
+alternet.runners.run_alternet - INFO - After gene plausibility filter: 0 gene-unique edges remain
+alternet.annotation - INFO - annotate_gene_exclusive_edges: 0 GRN rows, 7 gene-transcript mappings
+alternet.annotation - INFO - get_common_annotation_dataframe: annotating 7 genes
+alternet.runners.run_alternet - INFO - Common edges split: 6 consistent (single/dominant), 54 ambiguous (balanced/non-dominant)
+alternet.runners.run_alternet - INFO - After consistent edge filtering: 1 consistent edges remain
+alternet.annotation - INFO - annotate_consistent_edges: 1 GRN rows, 1 unique transcripts
+alternet.annotation - INFO - get_transcript_annotation_table_for_unique_tfs: annotating 1 transcripts
+alternet.runners.run_alternet - INFO - Likely isoform-specific: 0 edges, remaining ambiguous: 54
+alternet.annotation - INFO - annotate_isoform_exclusive_edges: 0 GRN rows, 0 unique transcripts
+alternet.annotation - WARNING - build_transcript_annotation_table_for_unique_tfs: no transcripts to annotate (unique_tfs is empty)
+alternet.runners.run_alternet - INFO - Likely gene-specific: 36 edges, remaining ambiguous: 18
+alternet.annotation - INFO - annotate_gene_exclusive_edges: 36 GRN rows, 7 gene-transcript mappings
+alternet.annotation - INFO - get_common_annotation_dataframe: annotating 7 genes
