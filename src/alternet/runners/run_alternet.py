@@ -1,5 +1,5 @@
 import sys
-sys.path.append('/data/bionets/og86asub/alternet-project/alternet/')
+import logging
 import pandas as pd
 import alternet.data_preprocessing as preprocessing
 from alternet.annotation import map_tf_ids
@@ -14,6 +14,8 @@ import numpy as np
 import seaborn as sns
 import os.path as op
 import os
+
+logger = logging.getLogger(__name__)
 
 def write_dict_to_yaml(data: Dict[str, Any], filepath: str):
     """Writes a Python dictionary to a YAML file."""
@@ -46,8 +48,13 @@ def add_gene_names_and_save(edge_data, prefix, net_type, filepath, biomart):
 
 def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart, results_path, prefix = 'condition', runs=10):
 
+    logging.basicConfig(level=logging.INFO, format='%(name)s - %(levelname)s - %(message)s')
+
     tf_list = map_tf_ids(tf_list, biomart)
+    logger.info("TF list after biomart merge: %d TFs, %d unique genes, %d unique transcripts",
+                len(tf_list), tf_list['Gene stable ID'].nunique(), tf_list['Transcript stable ID'].nunique())
     tf_database = annotation.create_transcipt_annotation_database(tf_list=tf_list, appris_df= appris_df , digger=digger_df)
+    logger.info("TF annotation database: %d rows", len(tf_database))
     transcript_mapper = annotation.create_transcript_mapping(biomart)
 
     
@@ -83,16 +90,19 @@ def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart
     canonical_grn = inference(gene_data=gene_data_cp, tf_list=gene_target_names, target_names = 'all', n_runs=runs)
     end = time.monotonic()
     runtime = {'canonical': end-start}
+    logger.info("Canonical GRN: %d edges", len(canonical_grn))
     
     canonical_grn.to_csv(op.join(results_path, f"{prefix}_canonical.tsv"), header = True)
 
     hybrid_data = create_hybrid_data(transcript_data_cp, gene_data_cp, tf_list)
     hybrid_tf_names = list(tf_list['Transcript stable ID'].unique())
     target_names = list(gene_data_cp.columns)
+    logger.info("Hybrid data: %d TF transcripts, %d gene targets", len(hybrid_tf_names), len(target_names))
 
     start = time.monotonic()
     as_aware_grn = inference(gene_data=hybrid_data, tf_list=hybrid_tf_names, target_names=target_names, n_runs = runs)
     runtime['as_aware'] = time.monotonic()-start
+    logger.info("AS-aware GRN: %d edges", len(as_aware_grn))
 
     as_aware_grn.to_csv(op.join(results_path, f"{prefix}_as_aware.tsv"), header = True) 
     write_dict_to_yaml(runtime, op.join(results_path, f"{prefix}_runtime.yaml"))
@@ -109,6 +119,8 @@ def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart
     # Categorize edges into gene-unique, isoform-unique, common
     common_edges = postprocessing.get_common_edges(canonical_grn, as_aware_grn)
     gene_unique, isoform_unique = postprocessing.get_diff(canonical_grn, as_aware_grn)
+    logger.info("Edge diff: %d common, %d gene-unique, %d isoform-unique",
+                len(common_edges), len(gene_unique), len(isoform_unique))
 
     filtering_tracker = {'as_aware_base': as_aware_grn.shape[0], 'canonical_base': canonical_grn.shape[0],   'gene_unique_base': gene_unique.shape[0], 'isoform_unique_base': isoform_unique.shape[0]}
 
@@ -116,10 +128,16 @@ def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart
     # remove low quality edges
     gene_unique, gene_unique_filter_1 = postprocessing.frequency_filter(gene_unique,  threshold_frequency=runs)
     isoform_unique, isoform_unique_filter_1 = postprocessing.frequency_filter(isoform_unique, threshold_frequency=runs)
+    logger.info("After frequency filter (threshold=%d): %d gene-unique, %d isoform-unique",
+                runs, len(gene_unique), len(isoform_unique))
 
     # remove implausible edges, i.e. isoform edges where there is a dominant/single isoform which
     # should have been in gene GRN as well.
     isoform_unique, isoform_unique_plausibility_filter  = postprocessing.plausibility_filtering(isoform_unique, isoform_categories)
+    logger.info("After plausibility filter: %d isoform-unique edges remain", len(isoform_unique))
+    if isoform_unique.empty:
+        logger.warning("All isoform-unique edges were removed by plausibility filtering — "
+                       "all TF isoforms may be classified as 'single' or 'dominant'")
     # Merge isoform exon/domain information and save
     isoform_unique = annotation.annotate_isoform_exclusive_edges(isoform_unique, tf_database, transcript_column='source_transcript')
     
@@ -128,6 +146,7 @@ def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart
     # remove implausible edges, i.e. edges where there is a single/dominant isoform which should have been in
     # isoform GRN as well.
     gene_unique, gene_unique_plausibility_filter = postprocessing.plausibility_filtering_gene_unique(gene_unique, gene_categories)
+    logger.info("After gene plausibility filter: %d gene-unique edges remain", len(gene_unique))
     gene_unique = annotation.annotate_gene_exclusive_edges(gene_unique, annotation_database=tf_database, gene_transcript_mapping=gene_to_transcript_mapping)
 
 
@@ -137,21 +156,28 @@ def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart
 
     # Split into dominant/single isoform and ambigous (multiple isoforms)
     consistent, ambigous = postprocessing.split_by_isoform_category(merged_edges, gene_categories)
+    logger.info("Common edges split: %d consistent (single/dominant), %d ambiguous (balanced/non-dominant)",
+                len(consistent), len(ambigous))
     # remove edges which have vastly different frequencies and importances from dataframe (edges in common dataframe where there is only one single or
     # a dominant isoform should have a consistent importance and frequency).
     consistent, consistent_freq_filer = postprocessing.frequency_filtering_common_edges_dominant(consistent, threshold_frequency = runs)
     consistent, common_dominant_filter = postprocessing.plausibility_filtering_common_edges_dominant(consistent)
+    logger.info("After consistent edge filtering: %d consistent edges remain", len(consistent))
     consistent = annotation.annotate_consistent_edges(consistent, tf_database, transcript_column='source_transcript')
 
 
     # From remaining ambigous dataframe, select those edges which are sig. more importantn in isoform data frame
     likely_isoform_specific, ambigous, common_isoform_likely_filter = postprocessing.find_likely_isoform_specific(ambigous)
+    logger.info("Likely isoform-specific: %d edges, remaining ambiguous: %d",
+                len(likely_isoform_specific), len(ambigous))
     # add transcript annotation and save
     likely_isoform_specific = annotation.annotate_isoform_exclusive_edges(likely_isoform_specific, tf_database, transcript_column='source_transcript')
 
     
     # from remaining ambigous dataframe, select those where the gene edge is more important than any isoform edge.
     likely_gene_specific, ambigous, common_gene_likely_filter = postprocessing.find_likely_gene_specific(ambigous)
+    logger.info("Likely gene-specific: %d edges, remaining ambiguous: %d",
+                len(likely_gene_specific), len(ambigous))
     likely_gene_specific = annotation.annotate_gene_exclusive_edges(likely_gene_specific, annotation_database=tf_database, gene_transcript_mapping=gene_to_transcript_mapping)
     
     # remaining edges are ambigous.
@@ -209,20 +235,22 @@ def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart
 
 if __name__ == '__main__':
 
-    results_path = "/data/bionets/og86asub/alternet-project/alternet-manuscript/results_new/"
-    data_path = "/data/bionets/og86asub/alternet-project/alternet/data/"
-    appris_path = "/data/bionets/og86asub/alternet-project/alternet/data/appris_data.appris.txt"
-    digger_path = "/data/bionets/og86asub/alternet-project/alternet/data/digger_data.csv"
-    biomart_path = '/data/bionets/og86asub/alternet-project/alternet/data/biomart.txt'
-    tf_list_path = '/data/bionets/og86asub/alternet-project/alternet/data/allTFs_hg38.txt'
+    data_path = op.join(op.dirname(__file__), '..', '..', '..', 'data')
+    results_path = op.join(op.dirname(__file__), '..', '..', '..', 'results')
+    prefix = 'NF_minimal'
 
+    appris_path = op.join(data_path, 'appris_data.appris.txt')
+    digger_path = op.join(data_path, 'digger_data.csv')
+    biomart_path = op.join(data_path, 'biomart.txt')
+    tf_list_path = op.join(data_path, 'allTFs_hg38.txt')
+    magnet_path = op.join(data_path, 'minimal_NF_magnet_prefiltered_tpm.tsv')
 
     os.makedirs(results_path, exist_ok=True)
 
     appris_df = pd.read_csv(appris_path, sep='\t')
     biomart = pd.read_csv(biomart_path, sep='\t')
-    tf_list = pd.read_csv(tf_list_path, sep='\t', header = None)
-   
-    magnet_path = op.join(data_path, f"{prefix}_magnet_prefiltered_tpm.tsv")
+    tf_list = pd.read_csv(tf_list_path, sep='\t', header=None)
+    digger_df = pd.read_csv(digger_path, sep=',')
     transcript_data_cp = pd.read_csv(magnet_path, sep='\t')
-    
+
+    alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart, results_path, prefix=prefix, runs=10)

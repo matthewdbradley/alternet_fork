@@ -1,7 +1,10 @@
+import logging
 import pandas as pd 
 import os.path as op
 import copy
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def filter_aggregated(data, threshold_importance=0.3, threshold_frequency=5, importance_column='median_importance', frequency_column = 'frequency'):
@@ -113,6 +116,12 @@ def frequency_filter(data,  threshold_frequency=5,frequency_column = 'frequency'
     
     n_after = data.shape[0]
 
+    logger.info("frequency_filter (threshold=%d): %d -> %d edges", threshold_frequency, n_before, n_after)
+    if n_after == 0 and n_before > 0:
+        max_freq = data[frequency_column].max() if n_before > 0 else 0
+        logger.warning("frequency_filter: all %d edges removed — max frequency in data was %s vs threshold %d",
+                       n_before, max_freq, threshold_frequency)
+
     filter_info = {'before': n_before, 'n_after_frequency': n_after}
     return data.copy(), filter_info
 
@@ -223,6 +232,11 @@ def get_diff(gene_grn, transcript_grn):
     # Filter rows based on the set differences
     diff_gene = gene_grn[gene_grn['edge_key'].isin(diff_gene_edges)]
     diff_transcript = transcript_grn[transcript_grn['edge_key'].isin(diff_transcript_edges)]
+
+    logger.info("get_diff: %d gene-only edges, %d transcript-only edges (from %d gene / %d transcript total)",
+                len(diff_gene), len(diff_transcript), len(gene_edges), len(transcript_edges))
+    if len(diff_transcript_edges) == 0:
+        logger.warning("get_diff: no isoform-unique edges — AS-aware GRN edge keys are a subset of canonical GRN")
 
     return diff_gene, diff_transcript
 
@@ -351,6 +365,12 @@ def plausibility_filtering(isoform_unique, isoform_categories):
     isoform_unique = isoform_unique[~isoform_unique.isoform_category.isin(['dominant'])]
     n_after_dominant = isoform_unique.shape[0]
 
+    logger.info("plausibility_filtering: %d -> %d after removing 'single', -> %d after removing 'dominant'",
+                n_before, n_after_single, n_after_dominant)
+    if n_after_dominant == 0 and n_before > 0:
+        cats = isoform_categories['isoform_category'].value_counts().to_dict()
+        logger.warning("plausibility_filtering: all edges removed — isoform category distribution: %s", cats)
+
     isoform_unique = isoform_unique.sort_values('median_importance', ascending=False)
 
     filter_info = {'n_before': n_before, 'n_after_equivalence': n_after_single,  'n_after_dominance': n_after_dominant}
@@ -407,6 +427,13 @@ def plausibility_filtering_gene_unique(gene_unique, gene_categories):
     n_after_single = gene_unique.shape[0]
     gene_unique = gene_unique[~gene_unique.source_gene.isin(gene_categories[gene_categories.gene_category.isin(['dominant'])]['Gene stable ID'])]
     n_after_dominant = gene_unique.shape[0]
+
+    logger.info("plausibility_filtering_gene_unique: %d -> %d after removing 'single', -> %d after removing 'dominant'",
+                n_before, n_after_single, n_after_dominant)
+    if n_after_dominant == 0 and n_before > 0:
+        cats = gene_categories['gene_category'].value_counts().to_dict()
+        logger.warning("plausibility_filtering_gene_unique: all edges removed — gene category distribution: %s", cats)
+
     filter_info = {'n_before': n_before, 'n_after_equivalence': n_after_single,  'n_after_dominance': n_after_dominant}
     gene_unique = gene_unique.sort_values('median_importance', ascending=False)
     return gene_unique, filter_info

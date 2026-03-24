@@ -1,6 +1,9 @@
+import logging
 import pandas as pd 
 from collections import defaultdict
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -16,9 +19,15 @@ def map_tf_ids(tf_list, biomart):
     Returns:
         pd.DataFrame: Transcription factors with corresponding gene and transcript information from BioMart.
    '''
+    n_input = len(tf_list)
     tf_list.columns  = ['TF'] # rename column to TF 
     tf_list = tf_list.merge(biomart, left_on = 'TF', right_on = 'Gene name') # merge tf list with biomart: join 'TF' with 'Gene name'
     tf_list = tf_list.loc[:, ['TF', 'Gene stable ID', 'Transcript stable ID']].drop_duplicates() #remove individual versions
+    n_matched = tf_list['TF'].nunique()
+    logger.info("map_tf_ids: %d input TFs, %d matched to biomart, %d transcript IDs",
+                n_input, n_matched, len(tf_list))
+    if n_matched == 0:
+        logger.warning("map_tf_ids: no TFs matched biomart — check gene name format")
     return tf_list
 
 
@@ -305,12 +314,13 @@ def build_transcript_annotation_table_for_unique_tfs(unique_tfs, annotation_data
         annot_dict['Transcript stable ID'] = tid
         annotations.append(annot_dict)
 
-    annotation_df = pd.DataFrame(annotations)
-    
-    if 'Transcript stable ID' not in annotation_df.columns:
-        raise ValueError("Transcript stable ID column missing after annotations build")
+    if not annotations:
+        logger.warning("build_transcript_annotation_table_for_unique_tfs: "
+                       "no transcripts to annotate (unique_tfs is empty)")
+        return pd.DataFrame(index=pd.Index([], name='Transcript stable ID'))
 
-    annotation_df = annotation_df.set_index('Transcript stable ID')
+    logger.info("build_transcript_annotation_table_for_unique_tfs: annotating %d transcripts", len(annotations))
+    annotation_df = pd.DataFrame(annotations).set_index('Transcript stable ID')
     return annotation_df
 
 
@@ -335,6 +345,8 @@ def annotate_isoform_exclusive_edges(grn, annotation_database, transcript_column
     '''
 
     unique_transcripts = grn[transcript_column].unique()
+    logger.info("annotate_isoform_exclusive_edges: %d GRN rows, %d unique transcripts",
+                len(grn), len(unique_transcripts))
     annot_df = build_transcript_annotation_table_for_unique_tfs(unique_transcripts, annotation_database)
     grn_annot = grn.merge(annot_df, how='left', left_on=transcript_column, right_index=True)
 
@@ -420,6 +432,12 @@ def get_transcript_annotation_table_for_unique_tfs(unique_tfs, annotation_databa
         annot['Transcript stable ID'] = tid
         annotations.append(annot)
 
+    if not annotations:
+        logger.warning("get_transcript_annotation_table_for_unique_tfs: "
+                       "no transcripts to annotate (unique_tfs is empty)")
+        return pd.DataFrame(index=pd.Index([], name='Transcript stable ID'))
+
+    logger.info("get_transcript_annotation_table_for_unique_tfs: annotating %d transcripts", len(annotations))
     annotation_df = pd.DataFrame(annotations).set_index('Transcript stable ID')
     return annotation_df
 
@@ -444,6 +462,8 @@ def annotate_consistent_edges(grn, annotation_database, transcript_column = 'sou
     '''
 
     unique_transcripts = grn[transcript_column].unique()
+    logger.info("annotate_consistent_edges: %d GRN rows, %d unique transcripts",
+                len(grn), len(unique_transcripts))
     annot_df = get_transcript_annotation_table_for_unique_tfs(unique_transcripts, annotation_database)
     grn_annot = grn.merge(annot_df, how='left', left_on=transcript_column, right_index=True)
 
@@ -478,6 +498,13 @@ def get_common_annotation_dataframe(unique_genes, annotation_database):
         annot = get_common_annotations(gid, unique_genes[gid], annotation_database)
         annot['Gene stable ID'] = gid
         annotations.append(annot)
+
+    if not annotations:
+        logger.warning("get_common_annotation_dataframe: "
+                       "no genes to annotate (unique_genes is empty)")
+        return pd.DataFrame(index=pd.Index([], name='Gene stable ID'))
+
+    logger.info("get_common_annotation_dataframe: annotating %d genes", len(annotations))
     annotation_df = pd.DataFrame(annotations).set_index('Gene stable ID')
     return annotation_df
 
@@ -502,6 +529,8 @@ def annotate_gene_exclusive_edges(grn, annotation_database, gene_transcript_mapp
 
     '''
 
+    logger.info("annotate_gene_exclusive_edges: %d GRN rows, %d gene-transcript mappings",
+                len(grn), len(gene_transcript_mapping))
     #gene_transcript_mapping = grn.groupby(gene_column)[transcript_column].unique().apply(list).to_dict()
     annot_df = get_common_annotation_dataframe(gene_transcript_mapping, annotation_database)
     grn_annot = grn.merge(annot_df, how='left', left_on=gene_column, right_index=True)
