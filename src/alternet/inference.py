@@ -7,16 +7,16 @@ from signifikante.algo import grnboost2
 from alternet.data_preprocessing import *
 from collections import defaultdict
 from tqdm import tqdm 
-
-    '''
-    Finds number of threads based on SLURM job parameters
-    '''
+import multiprocessing as mp
 
 def get_client():
     n_cpus = os.environ.get("SLURM_CPUS_PER_TASK", 1)
     if n_cpus:
-        return Client(processes=True, n_workers=int(n_cpus), threads_per_worker=1)
+        print("Successfully retrieved n_cpus and started cluster")
+        print(f"Using {mp.get_start_method()} method for cluster config")
+        return Client(processes=True, n_workers=int(n_cpus), threads_per_worker=1, nanny = False)
     else:
+        print("Defaulting to default LocalCluster config")
         return Client(LocalCluster())
 
 

@@ -292,37 +292,27 @@ def check_annotations(transcript_id, annotation_database):
     unique_items = compare_values(transcript_data, comparison_df)
     return pd.Series(unique_items)
 
-
-
 def build_transcript_annotation_table_for_unique_tfs(unique_tfs, annotation_database):
     '''
     Build a transcript-level annotation table for a set of unique transcription factor (TF) isoforms.
-
-    Parameters:
-
-        unique_tfs : list
-            List of Ensembl transcript IDs corresponding to unique TF isoforms.
-
-        annotation_database : pd.DataFrame
-            DataFrame containing APPRIS, DIGGER, and Ensembl annotation data.
-
-    Returns:
-    
-        pd.DataFrame
-            DataFrame indexed by transcript ID, containing annotation information for each TF isoform.
-
-    
     '''
-    # Precompute annotations for all transcripts
     annotations = []
+
     for tid in unique_tfs:
-
         annot = check_annotations(tid, annotation_database)
-        annot['Transcript stable ID'] = tid
-        annotations.append(annot)
+        # Ensure it's a dict (Series may have name set) and always has the correct key
+        annot_dict = dict(annot)
+        annot_dict['Transcript stable ID'] = tid
+        annotations.append(annot_dict)
 
-    annotation_df = pd.DataFrame(annotations).set_index('Transcript stable ID')
+    annotation_df = pd.DataFrame(annotations)
+    
+    if 'Transcript stable ID' not in annotation_df.columns:
+        raise ValueError("Transcript stable ID column missing after annotations build")
+
+    annotation_df = annotation_df.set_index('Transcript stable ID')
     return annotation_df
+
 
 
 def annotate_isoform_exclusive_edges(grn, annotation_database, transcript_column = 'source_transcript'):
