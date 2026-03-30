@@ -46,7 +46,7 @@ def add_gene_names_and_save(edge_data, prefix, net_type, filepath, biomart):
 
 
 
-def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart, results_path, prefix = 'condition', runs=10):
+def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart, results_path, prefix = 'condition', runs=10, gene_only=False):
 
     logging.basicConfig(level=logging.INFO, format='%(name)s - %(levelname)s - %(message)s')
 
@@ -93,6 +93,16 @@ def alternet_pipeline(transcript_data_cp, appris_df, digger_df, tf_list, biomart
     logger.info("Canonical GRN: %d edges", len(canonical_grn))
     
     canonical_grn.to_csv(op.join(results_path, f"{prefix}_canonical.tsv"), header = True)
+
+    if gene_only:
+        canonical_grn, _ = postprocessing.frequency_filter(canonical_grn, threshold_frequency=runs)
+        absolute_threshold = np.percentile(canonical_grn['median_importance'], q=80)
+        canonical_grn, _ = postprocessing.filter_importance(canonical_grn, absolute_treshold=absolute_threshold)
+        canonical_grn = canonical_grn.rename(columns={'source': 'source_gene'})
+        add_gene_names_and_save(canonical_grn, prefix, 'gene_only', results_path, biomart)
+        write_dict_to_yaml(runtime, op.join(results_path, f"{prefix}_runtime.yaml"))
+        logger.info("Gene-only mode: saved %d edges", len(canonical_grn))
+        return
 
     hybrid_data = create_hybrid_data(transcript_data_cp, gene_data_cp, tf_list)
     hybrid_tf_names = list(tf_list['Transcript stable ID'].unique())
