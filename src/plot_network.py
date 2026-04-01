@@ -176,8 +176,8 @@ def plot_top_genes(G, out_dir, top_n=20):
 
 
 def main():
-    results_path = op.join(op.dirname(__file__), '..', 'results_minimal')
-    prefix = 'NF_minimal'
+    results_path = op.join(op.dirname(__file__), '..', 'results', 'myc-all-samples')
+    prefix = 'myc-all-samples'
     out_dir = op.join(results_path, 'figures')
     os.makedirs(out_dir, exist_ok=True)
 
