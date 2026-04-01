@@ -138,37 +138,36 @@ def plot_degree_distribution(G, out_dir):
     print(f"Saved: {op.join(out_dir, 'degree_distribution.png')}")
 
 
+def _format_bar_label(val):
+    if isinstance(val, int):
+        return str(val)
+    if abs(val) < 0.001:
+        return f'{val:.2e}'
+    return f'{val:.4f}'
+
+
 def plot_top_genes(G, out_dir, top_n=20):
-    betweenness = nx.betweenness_centrality(G)
-    pagerank = nx.pagerank(G)
-    degree_dict = dict(G.degree())
-
-    # Select top genes by betweenness centrality (most robust for GRNs)
-    top_nodes = sorted(betweenness, key=betweenness.get, reverse=True)[:top_n]
-
-    metrics = pd.DataFrame({
-        'Degree': {n: degree_dict[n] for n in top_nodes},
-        'Betweenness': {n: betweenness[n] for n in top_nodes},
-        'PageRank': {n: pagerank[n] for n in top_nodes},
-    })
+    metrics = {
+        'Degree': dict(G.degree()),
+        'Betweenness': nx.betweenness_centrality(G),
+        'PageRank': nx.pagerank(G),
+    }
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     colors = ['#377eb8', '#e41a1c', '#4daf4a']
 
-    for ax, col, color in zip(axes, metrics.columns, colors):
-        vals = metrics[col]
-        bars = ax.barh(range(len(vals)), vals.values, color=color, edgecolor='black')
-        ax.set_yticks(range(len(vals)))
-        ax.set_yticklabels(vals.index, fontsize=9)
+    for ax, (name, scores), color in zip(axes, metrics.items(), colors):
+        top = pd.Series(scores).nlargest(top_n)
+        bars = ax.barh(range(len(top)), top.values, color=color, edgecolor='black')
+        ax.set_yticks(range(len(top)))
+        ax.set_yticklabels(top.index, fontsize=9)
         ax.invert_yaxis()
-        ax.set_xlabel(col)
-        ax.set_title(f'Top {len(vals)} Genes — {col}')
-        for bar, val in zip(bars, vals.values):
-            label = str(val) if isinstance(val, int) else f'{val:.4f}'
+        ax.set_xlabel(name)
+        ax.set_title(f'Top {len(top)} Genes — {name}')
+        for bar, val in zip(bars, top.values):
             ax.text(bar.get_width(), bar.get_y() + bar.get_height() / 2,
-                    f' {label}', va='center', fontsize=7)
+                    f' {_format_bar_label(val)}', va='center', fontsize=7)
 
-    fig.suptitle('Ranked by Betweenness Centrality', fontsize=12, y=1.01)
     fig.tight_layout()
     fig.savefig(op.join(out_dir, 'top_genes_by_centrality.png'), dpi=200, bbox_inches='tight')
     plt.close(fig)
