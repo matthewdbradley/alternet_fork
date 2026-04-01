@@ -49,19 +49,22 @@ def load_edges(results_path, prefix):
 
     edges = pd.concat(frames, ignore_index=True)
 
-    # Resolve the best available source name column
-    if 'source_transcript_name' in edges.columns:
-        edges['source_label'] = edges['source_transcript_name'].fillna(
-            edges.get('source_gene_name', edges.get('source_gene', '')))
-    elif 'source_gene_name' in edges.columns:
-        edges['source_label'] = edges['source_gene_name']
-    else:
-        edges['source_label'] = edges.get('source_gene', edges.get('source_transcript', ''))
+    # Resolve the best available source name column, falling back through
+    # transcript name -> gene name -> gene ID -> transcript ID
+    source_candidates = ['source_transcript_name', 'source_gene_name', 'source_gene', 'source_transcript']
+    edges['source_label'] = pd.NA
+    for col in source_candidates:
+        if col in edges.columns:
+            edges['source_label'] = edges['source_label'].fillna(edges[col])
 
-    if 'target_gene_name' in edges.columns:
-        edges['target_label'] = edges['target_gene_name']
-    else:
-        edges['target_label'] = edges['target_gene']
+    target_candidates = ['target_gene_name', 'target_gene']
+    edges['target_label'] = pd.NA
+    for col in target_candidates:
+        if col in edges.columns:
+            edges['target_label'] = edges['target_label'].fillna(edges[col])
+
+    # Drop any edges where labels could not be resolved
+    edges = edges.dropna(subset=['source_label', 'target_label'])
 
     return edges
 
@@ -90,9 +93,12 @@ def plot_network(G, edges, out_dir):
                                    alpha=0.6, arrows=True, arrowsize=12,
                                    label=cat.replace('_', ' '))
 
-    # Node sizes proportional to degree
+    # Node sizes proportional to degree, scaled relative to network size
     degrees = dict(G.degree())
-    node_sizes = [300 + 80 * degrees[n] for n in G.nodes()]
+    n_nodes = G.number_of_nodes()
+    base_size = max(10, 800 / n_nodes)
+    scale_factor = max(1, 200 / n_nodes)
+    node_sizes = [base_size + scale_factor * degrees[n] for n in G.nodes()]
 
     # TF sources vs targets
     sources = set(edges['source_label'])
@@ -101,7 +107,10 @@ def plot_network(G, edges, out_dir):
 
     nx.draw_networkx_nodes(G, pos, ax=ax, node_size=node_sizes,
                            node_color=node_colors, edgecolors='#333333', linewidths=0.5)
-    nx.draw_networkx_labels(G, pos, ax=ax, font_size=7)
+    max_degree = max(degrees.values()) if degrees else 1
+    font_sizes = {n: max(4, base_size / 10 + scale_factor / 5 * degrees[n]) for n in G.nodes()}
+    for node, (x, y) in pos.items():
+        ax.text(x, y, node, fontsize=font_sizes[node], ha='center', va='center')
 
     ax.legend(loc='upper left', fontsize=8, title='Edge category')
     ax.set_title('AlterNet Regulatory Network', fontsize=14)
