@@ -139,25 +139,40 @@ def plot_degree_distribution(G, out_dir):
 
 
 def plot_top_genes(G, out_dir, top_n=20):
-    degree_series = pd.Series(dict(G.degree()))
-    top = degree_series.nlargest(top_n)
+    betweenness = nx.betweenness_centrality(G)
+    pagerank = nx.pagerank(G)
+    degree_dict = dict(G.degree())
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    bars = ax.barh(range(len(top)), top.values, color='#377eb8', edgecolor='black')
-    ax.set_yticks(range(len(top)))
-    ax.set_yticklabels(top.index, fontsize=9)
-    ax.invert_yaxis()
-    ax.set_xlabel('Degree')
-    ax.set_title(f'Top {len(top)} Genes by Degree')
+    # Select top genes by betweenness centrality (most robust for GRNs)
+    top_nodes = sorted(betweenness, key=betweenness.get, reverse=True)[:top_n]
 
-    for bar, val in zip(bars, top.values):
-        ax.text(bar.get_width() + 0.2, bar.get_y() + bar.get_height() / 2,
-                str(val), va='center', fontsize=8)
+    metrics = pd.DataFrame({
+        'Degree': {n: degree_dict[n] for n in top_nodes},
+        'Betweenness': {n: betweenness[n] for n in top_nodes},
+        'PageRank': {n: pagerank[n] for n in top_nodes},
+    })
 
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    colors = ['#377eb8', '#e41a1c', '#4daf4a']
+
+    for ax, col, color in zip(axes, metrics.columns, colors):
+        vals = metrics[col]
+        bars = ax.barh(range(len(vals)), vals.values, color=color, edgecolor='black')
+        ax.set_yticks(range(len(vals)))
+        ax.set_yticklabels(vals.index, fontsize=9)
+        ax.invert_yaxis()
+        ax.set_xlabel(col)
+        ax.set_title(f'Top {len(vals)} Genes — {col}')
+        for bar, val in zip(bars, vals.values):
+            label = str(val) if isinstance(val, int) else f'{val:.4f}'
+            ax.text(bar.get_width(), bar.get_y() + bar.get_height() / 2,
+                    f' {label}', va='center', fontsize=7)
+
+    fig.suptitle('Ranked by Betweenness Centrality', fontsize=12, y=1.01)
     fig.tight_layout()
-    fig.savefig(op.join(out_dir, 'top_genes_by_degree.png'), dpi=200)
+    fig.savefig(op.join(out_dir, 'top_genes_by_centrality.png'), dpi=200, bbox_inches='tight')
     plt.close(fig)
-    print(f"Saved: {op.join(out_dir, 'top_genes_by_degree.png')}")
+    print(f"Saved: {op.join(out_dir, 'top_genes_by_centrality.png')}")
 
 
 def main():
