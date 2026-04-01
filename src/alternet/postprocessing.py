@@ -143,12 +143,12 @@ def create_enst_to_tid_mapping(biomart):
 
 def add_transcript_names(edgelist, biomart, transcript_column = 'source_transcript'):
     transcript_name_mapper = create_enst_to_tid_mapping(biomart)
-    edgelist[f'{transcript_column}_name'] = edgelist[transcript_column].apply(lambda x: transcript_name_mapper[x])
+    edgelist[f'{transcript_column}_name'] = edgelist[transcript_column].apply(lambda x: transcript_name_mapper.get(x, x))
     return edgelist
 
 def add_gene_names(edgelist, biomart, gene_column = 'target_gene'):
     gene_name_mapper = create_ensg_to_geneid_mapping(biomart)
-    edgelist[f'{gene_column}_name'] = edgelist[gene_column].apply(lambda x: gene_name_mapper[x])
+    edgelist[f'{gene_column}_name'] = edgelist[gene_column].apply(lambda x: gene_name_mapper.get(x, x))
     return edgelist
 
 
