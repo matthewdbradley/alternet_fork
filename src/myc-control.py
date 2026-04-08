@@ -8,6 +8,9 @@ import seaborn as sns
 import os.path as op
 import os
 
+from plot_network import run_all_visualizations
+
+
 def main():
 
     # The data folder shipped with the repo
@@ -42,6 +45,9 @@ def main():
         prefix="NF_minimal",
         runs=10,
     )
+
+    # RUN visualizations and downstream analysis
+    run_all_visualizations(results_path, prefix="NF_minimal")
 
 
 if __name__ == "__main__":
